@@ -20,8 +20,8 @@ final class ActivityMonitor: ObservableObject {
     }
 
     func start() {
-        // Scan every 2 seconds for new tokens in JSONL files
-        scanTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        // Scan every 1 second for new tokens in JSONL files
+        scanTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.scanForNewTokens()
             }
@@ -64,8 +64,8 @@ final class ActivityMonitor: ObservableObject {
             readNewLines(from: fileURL)
         }
 
-        // Clean old entries (older than 30 seconds)
-        let windowStart = Date().addingTimeInterval(-30)
+        // Clean old entries (older than 15 seconds)
+        let windowStart = Date().addingTimeInterval(-15)
         recentTokens.removeAll { $0.date < windowStart }
         remoteTokens.removeAll { $0.date < windowStart }
 

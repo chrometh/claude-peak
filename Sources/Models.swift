@@ -57,8 +57,24 @@ struct UsageBucket: Codable {
 
 struct ExtraUsage: Codable {
     let isEnabled: Bool
+    let monthlyLimit: Double?
+    let usedCredits: Double?
+    let utilization: Double?
 
     enum CodingKeys: String, CodingKey {
         case isEnabled = "is_enabled"
+        case monthlyLimit = "monthly_limit"
+        case usedCredits = "used_credits"
+        case utilization
+    }
+
+    var percentage: Int {
+        guard let utilization = utilization else { return 0 }
+        return min(100, Int(utilization))
+    }
+
+    var remaining: Double? {
+        guard let limit = monthlyLimit, let used = usedCredits else { return nil }
+        return max(0, limit - used)
     }
 }

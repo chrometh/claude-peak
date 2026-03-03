@@ -284,9 +284,14 @@ struct UsageView: View {
         Divider()
 
         sectionHeader("Extra Usage")
-        Text(usage.extraUsage.isEnabled ? "Enabled" : "Disabled")
-            .font(.system(.body, design: .monospaced))
-            .foregroundColor(usage.extraUsage.isEnabled ? .green : .secondary)
+        if usage.extraUsage.isEnabled, let limit = usage.extraUsage.monthlyLimit,
+           let used = usage.extraUsage.usedCredits {
+            extraUsageBar(used: used / 100, limit: limit / 100, percentage: usage.extraUsage.percentage)
+        } else {
+            Text(usage.extraUsage.isEnabled ? "Enabled" : "Disabled")
+                .font(.system(.body, design: .monospaced))
+                .foregroundColor(usage.extraUsage.isEnabled ? .green : .secondary)
+        }
 
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
             HStack {
@@ -334,6 +339,51 @@ struct UsageView: View {
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
         }
+    }
+
+    private func extraUsageBar(used: Double, limit: Double, percentage: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("$\(formatDollars(used)) / $\(formatDollars(limit))")
+                    .font(.system(.body, design: .monospaced))
+                Spacer()
+                Text("\(percentage)%")
+                    .font(.system(.body, design: .monospaced))
+                    .bold()
+                    .foregroundColor(colorForPercentage(percentage))
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 8)
+
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(colorForPercentage(percentage))
+                        .frame(width: geo.size.width * min(1, CGFloat(percentage) / 100), height: 8)
+                }
+            }
+            .frame(height: 8)
+
+            let remaining = max(0, limit - used)
+            Text("$\(formatDollars(remaining)) remaining")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func formatDollars(_ value: Double) -> String {
+        if value >= 1000 {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.maximumFractionDigits = 0
+            return formatter.string(from: NSNumber(value: value)) ?? "\(Int(value))"
+        }
+        if value == value.rounded() {
+            return "\(Int(value))"
+        }
+        return String(format: "%.2f", value)
     }
 
     private func errorView(_ message: String) -> some View {

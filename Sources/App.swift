@@ -104,35 +104,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func createFlameImage(count: Int, frame: Int) -> NSImage {
         let size: CGFloat = 18
-        let overlap: CGFloat = 6
+        let overlap: CGFloat = 0
         let totalWidth = count == 0 ? size : size + CGFloat(count - 1) * (size - overlap)
 
         let image = NSImage(size: NSSize(width: totalWidth, height: size))
         image.lockFocus()
 
         for i in 0..<count {
-            // Each flame flickers independently using offset frame
+            // Each sparkle flickers independently using offset frame
             let flicker = (frame + i * 2) % 4
-            let symbolName: String
             let pointSize: CGFloat
 
             switch flicker {
-            case 0:
-                symbolName = "flame.fill"
-                pointSize = 14
-            case 1:
-                symbolName = "flame.fill"
-                pointSize = 12
-            case 2:
-                symbolName = "flame"
-                pointSize = 13
-            default:
-                symbolName = "flame.fill"
-                pointSize = 15
+            case 0:  pointSize = 16
+            case 1:  pointSize = 14
+            case 2:  pointSize = 15
+            default: pointSize = 17
             }
 
             let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
-            if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            if let symbol = NSImage(systemSymbolName: "sparkle", accessibilityDescription: nil)?
                 .withSymbolConfiguration(config) {
                 let x = CGFloat(i) * (size - overlap)
                 let yOffset = (size - pointSize) / 2
@@ -147,9 +138,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Update
 
+    private func colorForPercentage(_ pct: Int) -> NSColor {
+        if pct >= 80 { return .systemRed }
+        if pct >= 50 { return .systemOrange }
+        return .systemGreen
+    }
+
+    private func createProgressBarImage(percentage: Int, text: String) -> NSImage {
+        // The border is a ring AROUND the color bar.
+        // We size the image to fit: border ring + gap + inner color pill.
+        let barHeight: CGFloat = 20
+        let horizontalPadding: CGFloat = 12
+        let borderThickness: CGFloat = 1.5
+        let textFont = NSFont.menuBarFont(ofSize: 0)
+
+        let textColor: NSColor = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? .white
+            : .black
+
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: textFont,
+            .foregroundColor: textColor
+        ]
+        let textSize = (text as NSString).size(withAttributes: textAttrs)
+        let barWidth = textSize.width + horizontalPadding * 2
+
+        let image = NSImage(size: NSSize(width: barWidth, height: barHeight))
+        image.lockFocus()
+
+        let outerRadius = barHeight / 2
+        let outerRect = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
+        let innerRect = outerRect.insetBy(dx: borderThickness, dy: borderThickness)
+        let innerRadius = outerRadius - borderThickness
+        let innerPath = NSBezierPath(roundedRect: innerRect, xRadius: innerRadius, yRadius: innerRadius)
+
+        // 1) Track background (drawn first, behind everything)
+        textColor.withAlphaComponent(0.1).setFill()
+        innerPath.fill()
+
+        // 2) Color fill — clipped to inner pill so it fits perfectly against the border
+        let fillWidth = innerRect.width * min(1, CGFloat(percentage) / 100)
+
+        if fillWidth > 0 {
+            NSGraphicsContext.saveGraphicsState()
+            innerPath.addClip()
+
+            let fillRect = NSRect(x: innerRect.origin.x, y: innerRect.origin.y,
+                                  width: fillWidth, height: innerRect.height)
+            colorForPercentage(percentage).setFill()
+            NSBezierPath.fill(fillRect)
+
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        // 3) Text
+        let textDrawColor: NSColor = percentage >= 40 ? .white : textColor
+        let textDrawAttrs: [NSAttributedString.Key: Any] = [
+            .font: textFont,
+            .foregroundColor: textDrawColor
+        ]
+
+        let textX = (barWidth - textSize.width) / 2
+        let capHeight = textFont.capHeight
+        let textY = (barHeight - capHeight) / 2 - (textFont.ascender - capHeight)
+        (text as NSString).draw(at: NSPoint(x: textX, y: textY), withAttributes: textDrawAttrs)
+
+        // 4) Border ring — drawn LAST so it's always on top of the fill
+        let borderPath = NSBezierPath(roundedRect: outerRect.insetBy(dx: borderThickness / 2, dy: borderThickness / 2),
+                                       xRadius: outerRadius - borderThickness / 2,
+                                       yRadius: outerRadius - borderThickness / 2)
+        borderPath.lineWidth = borderThickness
+        NSColor.labelColor.setStroke()
+        borderPath.stroke()
+
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
+    }
+
     private func updateMenuBar() {
         guard let button = statusItem.button else { return }
 
+        // Sparkle/flame icon — stays as template (adapts to menu bar appearance)
         if settings.flameMode != .off {
             let tps = activity.tokensPerSecond
             let count = flameCount(for: tps)
@@ -157,9 +227,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if count > 0 {
                 button.image = createFlameImage(count: count, frame: frameIndex)
             } else {
-                // Tiny static ember
-                let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .light)
-                let image = NSImage(systemSymbolName: "flame", accessibilityDescription: "usage")?
+                let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+                let image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "usage")?
                     .withSymbolConfiguration(config)
                 image?.isTemplate = true
                 button.image = image
@@ -169,18 +238,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let usage = service.usage else {
-            button.title = " —"
+            button.attributedTitle = NSAttributedString(string: " —")
+            button.title = ""
             return
         }
 
+        let pct = usage.fiveHour.percentage
+        let resetTime = usage.fiveHour.timeUntilReset
+
+        // Build display text for inside the bar
+        let displayText: String
         switch settings.menuBarDisplay {
-        case .percentOnly:
-            button.title = " \(usage.fiveHour.percentage)%"
-        case .timeOnly:
-            button.title = " \(usage.fiveHour.timeUntilReset)"
-        case .both:
-            button.title = " \(usage.fiveHour.percentage)% · \(usage.fiveHour.timeUntilReset)"
+        case .percentOnly:  displayText = "\(pct)%"
+        case .timeOnly:     displayText = resetTime
+        case .both:         displayText = "\(pct)% · \(resetTime)"
         }
+
+        // Progress bar as text attachment (keeps sparkle icon separate as template)
+        let barImage = createProgressBarImage(percentage: pct, text: displayText)
+        let attachment = NSTextAttachment()
+        attachment.image = barImage
+        let yOffset = -6.5
+        attachment.bounds = CGRect(x: 0, y: yOffset, width: barImage.size.width, height: barImage.size.height)
+
+        let attrString = NSMutableAttributedString(string: " ")
+        attrString.append(NSAttributedString(attachment: attachment))
+        button.title = ""
+        button.attributedTitle = attrString
     }
 
     private func animationInterval(for tps: Double) -> TimeInterval? {
