@@ -9,7 +9,10 @@ on:
 
 jobs:
   bottle:
-    runs-on: macos-15
+    strategy:
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     steps:
@@ -46,11 +49,59 @@ jobs:
             gh release create "$TAG" --title "$TAG" --generate-notes
           gh release upload "$TAG" "$BOTTLE" --clobber
 
+      - name: Upload bottle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-${{ matrix.os }}
+          path: claude-peak--*.bottle.json
+
+  update-formula:
+    needs: bottle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download all bottle JSON
+        uses: actions/download-artifact@v4
+        with:
+          path: bottles
+          merge-multiple: true
+
       - name: Update formula with bottle block
         run: |
-          TAP_PATH="$(brew --repository)/Library/Taps/letsur-dev/homebrew-claude-peak"
-          brew bottle --merge --write --no-commit claude-peak--*.bottle.json
-          cp "$TAP_PATH/Formula/claude-peak.rb" Formula/claude-peak.rb
+          python3 -c "
+          import json, glob, re
+
+          entries = []
+          root_url = None
+          for path in sorted(glob.glob('bottles/claude-peak--*.bottle.json')):
+              with open(path) as f:
+                  data = json.load(f)
+              info = list(data.values())[0]
+              root_url = info['bottle']['root_url']
+              for tag, details in info['bottle']['tags'].items():
+                  cellar = info['bottle']['cellar']
+                  sha256 = details['sha256']
+                  entries.append(f'    sha256 cellar: {cellar}, {tag}: \"{sha256}\"')
+
+          bottle_block = '  bottle do\n'
+          bottle_block += f'    root_url \"{root_url}\"\n'
+          bottle_block += '\n'.join(entries) + '\n'
+          bottle_block += '  end'
+
+          with open('Formula/claude-peak.rb') as f:
+              content = f.read()
+
+          content = re.sub(r'\n  bottle do\n.*?  end\n', '\n', content, flags=re.DOTALL)
+          content = content.replace('  license \"MIT\"\n', f'  license \"MIT\"\n\n{bottle_block}\n')
+
+          with open('Formula/claude-peak.rb', 'w') as f:
+              f.write(content)
+          "
 
       - name: Commit and push
         run: |
@@ -58,6 +109,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/claude-peak.rb
           git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "bottle: add bottle block for v${{ steps.bottle.outputs.version }}"
+          VERSION=$(grep -oP '/v\K[0-9.]+(?=\.tar)' Formula/claude-peak.rb)
+          git commit -m "bottle: add bottle block for v${VERSION}"
           git pull --rebase
           git push
