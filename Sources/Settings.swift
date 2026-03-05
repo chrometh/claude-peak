@@ -61,6 +61,15 @@ final class AppSettings: ObservableObject {
     @Published var flameMode: FlameMode {
         didSet { UserDefaults.standard.set(flameMode.rawValue, forKey: "flameMode") }
     }
+    @Published var remoteEnabled: Bool {
+        didSet { UserDefaults.standard.set(remoteEnabled, forKey: "remoteEnabled") }
+    }
+    @Published var remoteHost: String {
+        didSet { UserDefaults.standard.set(remoteHost, forKey: "remoteHost") }
+    }
+    @Published var remotePort: Int {
+        didSet { UserDefaults.standard.set(remotePort, forKey: "remotePort") }
+    }
 
     private init() {
         if let raw = UserDefaults.standard.string(forKey: "menuBarDisplay"),
@@ -83,5 +92,16 @@ final class AppSettings: ObservableObject {
         } else {
             self.flameMode = .dynamic
         }
+
+        self.remoteEnabled = UserDefaults.standard.bool(forKey: "remoteEnabled")
+
+        if let host = UserDefaults.standard.string(forKey: "remoteHost"), !host.isEmpty {
+            self.remoteHost = host
+        } else {
+            self.remoteHost = ""
+        }
+
+        let port = UserDefaults.standard.integer(forKey: "remotePort")
+        self.remotePort = port > 0 ? port : 3200
     }
 }

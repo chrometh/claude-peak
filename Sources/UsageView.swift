@@ -121,6 +121,42 @@ struct UsageView: View {
                 }
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("REMOTE SERVER")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+                Toggle(isOn: $settings.remoteEnabled) {
+                    HStack {
+                        Text("Enable")
+                            .font(.system(.caption, design: .monospaced))
+                        if settings.remoteEnabled {
+                            Circle()
+                                .fill(activity.remoteConnected ? Color.green : Color.red)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                if settings.remoteEnabled {
+                    HStack(spacing: 4) {
+                        TextField("Host", text: $settings.remoteHost)
+                            .font(.system(.caption, design: .monospaced))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: .infinity)
+                        Text(":")
+                            .font(.system(.caption, design: .monospaced))
+                        TextField("Port", text: Binding(
+                            get: { String(settings.remotePort) },
+                            set: { settings.remotePort = Int($0) ?? 3200 }
+                        ))
+                            .font(.system(.caption, design: .monospaced))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 50)
+                    }
+                }
+            }
+
             if !service.needsLogin {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("ACCOUNT")
@@ -204,10 +240,17 @@ struct UsageView: View {
     @ViewBuilder
     private func usageContent(_ usage: UsageResponse) -> some View {
         if settings.flameMode != .off {
-            HStack {
-                Text("\(String(format: "%.0f", activity.tokensPerSecond)) tokens/sec")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("\(String(format: "%.0f", activity.tokensPerSecond)) tokens/sec")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    if settings.remoteEnabled && activity.remoteConnected {
+                        Text("(+remote)")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.green)
+                    }
+                }
                 if !tpsMessage.isEmpty {
                     Text(tpsMessage)
                         .font(.system(.caption2, design: .monospaced))

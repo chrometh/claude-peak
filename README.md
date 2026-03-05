@@ -80,9 +80,10 @@ Four modes available in settings:
 ## Features
 
 - **Real-time flame animation** — Monitors `~/.claude/projects/` JSONL logs, animates flames based on token throughput
+- **Remote server monitoring** — Aggregate token activity from remote machines (e.g. via Tailscale) into a single flame display
 - **Menu bar display** — 5-hour utilization %, time until reset (configurable)
 - **Detailed popover** — 5-hour, 7-day (All models), 7-day (Sonnet) usage + reset timers
-- **Settings** — Display format, refresh interval (1/5/10 min), flame mode
+- **Settings** — Display format, refresh interval (1/5/10 min), flame mode, remote server
 - **OAuth PKCE** — Browser-based auth with automatic token refresh
 
 ## Installation
@@ -107,6 +108,49 @@ cd claude-peak
 # Launch
 open ~/Applications/Claude\ Peak.app
 ```
+
+## Remote Server
+
+Monitor Claude Code sessions running on remote machines. Token activity is fetched via HTTP and merged with local activity — flames reflect combined throughput.
+
+### Setup
+
+**On the remote machine (requires Node.js 18+):**
+
+```bash
+npx claude-peak-server
+```
+
+For persistent background service, use any process manager (e.g. systemd, pm2) or simply:
+
+```bash
+nohup npx claude-peak-server &
+```
+
+The server scans `~/.claude/projects/**/*.jsonl` every 2 seconds and exposes:
+- `GET /api/activity` → `{ tokensPerSecond, recentTokens: [{date, tokens}] }`
+- `GET /health` → `{ ok: true }`
+
+Default port: `3200` (override with `PORT` env var).
+
+**On your Mac:**
+
+Settings → Remote Server → toggle ON → enter host and port → 🟢 = connected.
+
+Connects via **HTTP** (direct network access required, e.g. Tailscale, LAN, VPN).
+
+<details>
+<summary>SSH-only environments</summary>
+
+If only SSH access is available, use port forwarding:
+
+```bash
+ssh -L 3200:localhost:3200 your-server
+```
+
+Then set host to `localhost` in Settings.
+
+</details>
 
 ## Tech Details
 
