@@ -118,13 +118,9 @@ Monitor Claude Code sessions running on remote machines. Token activity is fetch
 **On the remote machine (requires Node.js 18+):**
 
 ```bash
-npx claude-peak-server
-```
-
-For persistent background service, use any process manager (e.g. systemd, pm2) or simply:
-
-```bash
-nohup npx claude-peak-server &
+npx claude-peak-server          # starts in background
+npx claude-peak-server status   # check if running
+npx claude-peak-server down     # stop
 ```
 
 The server scans `~/.claude/projects/**/*.jsonl` every 2 seconds and exposes:

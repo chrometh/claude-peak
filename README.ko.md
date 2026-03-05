@@ -118,13 +118,9 @@ open ~/Applications/Claude\ Peak.app
 **원격 머신에서 (Node.js 18+ 필요):**
 
 ```bash
-npx claude-peak-server
-```
-
-백그라운드 상시 실행은 아무 프로세스 매니저(systemd, pm2 등) 또는 간단하게:
-
-```bash
-nohup npx claude-peak-server &
+npx claude-peak-server          # 백그라운드로 실행
+npx claude-peak-server status   # 상태 확인
+npx claude-peak-server down     # 종료
 ```
 
 서버는 `~/.claude/projects/**/*.jsonl`을 2초마다 스캔하고 다음 엔드포인트를 노출한다:
