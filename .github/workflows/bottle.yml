@@ -1,0 +1,63 @@
+name: Build Homebrew Bottle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Formula/claude-peak.rb'
+  workflow_dispatch:
+
+jobs:
+  bottle:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Homebrew tap
+        run: |
+          TAP_PATH="$(brew --repository)/Library/Taps/letsur-dev/homebrew-claude-peak"
+          brew tap-new letsur-dev/claude-peak
+          cp Formula/claude-peak.rb "$TAP_PATH/Formula/claude-peak.rb"
+          cd "$TAP_PATH"
+          git add -A
+          git commit -m "Add formula"
+
+      - name: Build bottle
+        run: brew install --build-bottle letsur-dev/claude-peak/claude-peak
+
+      - name: Create bottle
+        id: bottle
+        run: |
+          VERSION=$(brew info --json letsur-dev/claude-peak/claude-peak | jq -r '.[0].versions.stable')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          brew bottle --json \
+            --root-url "https://github.com/letsur-dev/claude-peak/releases/download/v${VERSION}" \
+            letsur-dev/claude-peak/claude-peak
+
+      - name: Upload bottle to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.bottle.outputs.version }}"
+          BOTTLE=$(ls claude-peak--*.bottle.tar.gz)
+          gh release view "$TAG" 2>/dev/null || \
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" "$BOTTLE" --clobber
+
+      - name: Update formula with bottle block
+        run: |
+          TAP_PATH="$(brew --repository)/Library/Taps/letsur-dev/homebrew-claude-peak"
+          brew bottle --merge --write --no-commit claude-peak--*.bottle.json
+          cp "$TAP_PATH/Formula/claude-peak.rb" Formula/claude-peak.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/claude-peak.rb
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git pull --rebase
+          git commit -m "bottle: add bottle block for v${{ steps.bottle.outputs.version }}"
+          git push
