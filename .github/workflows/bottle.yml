@@ -39,12 +39,18 @@ jobs:
             --root-url "https://github.com/letsur-dev/claude-peak/releases/download/v${VERSION}" \
             letsur-dev/claude-peak/claude-peak
 
+      - name: Rename bottle (double-hyphen to single)
+        run: |
+          for f in claude-peak--*.bottle.tar.gz; do
+            mv "$f" "${f//--/-}"
+          done
+
       - name: Upload bottle to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="v${{ steps.bottle.outputs.version }}"
-          BOTTLE=$(ls claude-peak--*.bottle.tar.gz)
+          BOTTLE=$(ls claude-peak-*.bottle.tar.gz)
           gh release view "$TAG" 2>/dev/null || \
             gh release create "$TAG" --title "$TAG" --generate-notes
           gh release upload "$TAG" "$BOTTLE" --clobber
