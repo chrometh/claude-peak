@@ -7,9 +7,10 @@ class ClaudePeak < Formula
 
   bottle do
     root_url "https://github.com/letsur-dev/claude-peak/releases/download/v1.3.0"
-    sha256 cellar: :any_skip_relocation, arm64_sequoia: "bd3dba949b6a59e05e710deb3d8c8a42cbc1628c1486f790833935c0a070c882"
-    sha256 cellar: :any_skip_relocation, arm64_tahoe: "001e4c337ae3e881688c1b0519d8ec644cfa3875648f0a5e92dd1eaf5bd693de"
+    sha256 cellar: :any_skip_relocation, arm64_sequoia: "c647c2988092140f8174f83e7d1720aabbbecccefa4720b0fce8c49bb84f7d37"
+    sha256 cellar: :any_skip_relocation, arm64_tahoe: "f4e83877a2f7d20b00bd183e24deff40b33ba541118ef015dda956398b86d689"
   end
+
 
   depends_on :macos
 
