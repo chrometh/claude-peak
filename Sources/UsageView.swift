@@ -4,7 +4,7 @@ struct UsageView: View {
     @ObservedObject var service: UsageService
     @ObservedObject var settings: AppSettings
     @ObservedObject var activity: ActivityMonitor
-    @ObservedObject var updateChecker: UpdateChecker
+
     @State private var showSettings = false
 
     var body: some View {
@@ -172,31 +172,11 @@ struct UsageView: View {
             }
 
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                if updateChecker.updateAvailable, let latest = updateChecker.latestVersion {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("UPDATE AVAILABLE")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.secondary)
-                        HStack {
-                            Text("v\(version) → v\(latest)")
-                                .font(.system(.caption, design: .monospaced))
-                            Spacer()
-                            Button("Copy brew command") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString("brew upgrade claude-peak", forType: .string)
-                            }
-                            .font(.system(.caption2, design: .monospaced))
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.mini)
-                        }
-                    }
-                } else {
-                    HStack {
-                        Spacer()
-                        Text("v\(version)")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.secondary)
-                    }
+                HStack {
+                    Spacer()
+                    Text("v\(version)")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
                 }
             }
         }
