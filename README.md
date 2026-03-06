@@ -90,6 +90,8 @@ Four modes available in settings:
 
 ### Homebrew (Recommended)
 
+Pre-built bottles available — no Xcode required.
+
 ```bash
 brew tap letsur-dev/claude-peak https://github.com/letsur-dev/claude-peak.git
 brew install claude-peak
@@ -98,7 +100,31 @@ brew install claude-peak
 claude-peak
 ```
 
+**Update:**
+
+```bash
+brew update
+brew upgrade claude-peak
+```
+
+<details>
+<summary>Troubleshooting</summary>
+
+If you see `undefined local variable` or tap-related errors:
+
+```bash
+brew untap letsur-dev/claude-peak
+brew tap letsur-dev/claude-peak https://github.com/letsur-dev/claude-peak.git
+brew reinstall claude-peak
+```
+
+> **Note:** The URL is required because the repo name is `claude-peak`, not `homebrew-claude-peak`.
+
+</details>
+
 ### Build from Source
+
+Requires Xcode or Command Line Tools with full Xcode.
 
 ```bash
 git clone https://github.com/letsur-dev/claude-peak.git
