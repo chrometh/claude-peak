@@ -85,6 +85,8 @@ jobs:
               root_url = info['bottle']['root_url']
               for tag, details in info['bottle']['tags'].items():
                   cellar = info['bottle']['cellar']
+                  if not cellar.startswith(':'):
+                      cellar = ':' + cellar
                   sha256 = details['sha256']
                   entries.append(f'    sha256 cellar: {cellar}, {tag}: \"{sha256}\"')
 
