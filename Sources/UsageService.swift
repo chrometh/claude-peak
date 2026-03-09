@@ -109,6 +109,8 @@ final class UsageService: ObservableObject {
                 TokenStore.clear()
                 Log.error("Refresh failed: \(error.localizedDescription)")
             }
+        } catch UsageServiceError.usageFetchFailed(429) {
+            Log.info("Rate limited (429), keeping previous data")
         } catch {
             self.error = error.localizedDescription
             Log.error("fetchUsage failed: \(error.localizedDescription)")
