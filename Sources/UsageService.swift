@@ -20,8 +20,21 @@ final class UsageService: ObservableObject {
 
     let oauthService = OAuthService()
 
+    private func loadCachedUsage() {
+        guard let data = UserDefaults.standard.data(forKey: "cachedUsage"),
+              let cached = try? JSONDecoder().decode(UsageResponse.self, from: data) else { return }
+        self.usage = cached
+    }
+
+    private func cacheUsage(_ usage: UsageResponse) {
+        if let data = try? JSONEncoder().encode(usage) {
+            UserDefaults.standard.set(data, forKey: "cachedUsage")
+        }
+    }
+
     func startPolling() {
         guard pollingTimer == nil else { return }
+        loadCachedUsage()
         Task { await fetchUsage() }
         let interval = TimeInterval(AppSettings.shared.pollingInterval.rawValue)
         pollingTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
@@ -88,6 +101,7 @@ final class UsageService: ObservableObject {
             self.usage = usageData
             self.error = nil
             self.needsLogin = false
+            cacheUsage(usageData)
             Log.info("Usage fetched: 5h=\(usageData.fiveHour.utilization)%, 7d=\(usageData.sevenDay.utilization)%")
         } catch is TokenStoreError {
             self.needsLogin = true
@@ -102,6 +116,7 @@ final class UsageService: ObservableObject {
                 let usageData = try await requestUsage(token: token)
                 self.usage = usageData
                 self.error = nil
+                cacheUsage(usageData)
                 Log.info("Refresh succeeded, usage: 5h=\(usageData.fiveHour.utilization)%")
             } catch {
                 self.needsLogin = true

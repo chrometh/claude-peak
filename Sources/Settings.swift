@@ -35,13 +35,11 @@ enum FlameMode: String, CaseIterable {
 }
 
 enum PollingInterval: Int, CaseIterable {
-    case one = 60
     case five = 300
     case ten = 600
 
     var label: String {
         switch self {
-        case .one: return "1 min"
         case .five: return "5 min"
         case .ten: return "10 min"
         }
