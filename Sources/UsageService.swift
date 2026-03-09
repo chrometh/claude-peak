@@ -110,6 +110,9 @@ final class UsageService: ObservableObject {
                 Log.error("Refresh failed: \(error.localizedDescription)")
             }
         } catch UsageServiceError.usageFetchFailed(429) {
+            if self.usage == nil {
+                self.error = "Rate limited. Will retry shortly."
+            }
             Log.info("Rate limited (429), keeping previous data")
         } catch {
             self.error = error.localizedDescription

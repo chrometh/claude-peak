@@ -31,7 +31,7 @@ class ClaudePeak < Formula
       #!/bin/bash
       APP="#{app_bundle}"
       LINK="$HOME/Applications/Claude Peak.app"
-      if [ ! -L "$LINK" ]; then
+      if [ ! -L "$LINK" ] || [ "$(readlink "$LINK")" != "$APP" ]; then
         mkdir -p "$HOME/Applications"
         rm -rf "$LINK"
         ln -sf "$APP" "$LINK"
