@@ -11,12 +11,14 @@ final class UsageService: ObservableObject {
     private let clientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private let tokenUrl = "https://platform.claude.com/v1/oauth/token"
     private let usageUrl = "https://api.anthropic.com/api/oauth/usage"
-    private let userAgent = "claude-code/2.0.32"
+    private let userAgent = "claude-code/2.1.73"
     private let scopes = "user:profile user:inference"
 
     private var cachedAccessToken: String?
     private var tokenExpiresAt: Date?
     private var pollingTimer: Timer?
+    private var rateLimitedUntil: Date?
+    private var consecutive429s = 0
 
     let oauthService = OAuthService()
 
@@ -90,6 +92,16 @@ final class UsageService: ObservableObject {
     }
 
     func fetchUsage() async {
+        // Skip if still rate-limited
+        if let rateLimitedUntil, Date() < rateLimitedUntil {
+            let remaining = Int(rateLimitedUntil.timeIntervalSinceNow)
+            Log.info("Skipping fetch, rate limited for \(remaining)s more")
+            if self.usage == nil {
+                self.error = "Rate limited. Retrying in \(remaining)s..."
+            }
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
 
@@ -101,6 +113,8 @@ final class UsageService: ObservableObject {
             self.usage = usageData
             self.error = nil
             self.needsLogin = false
+            self.rateLimitedUntil = nil
+            self.consecutive429s = 0
             cacheUsage(usageData)
             Log.info("Usage fetched: 5h=\(usageData.fiveHour.utilization)%, 7d=\(usageData.sevenDay.utilization)%")
         } catch is TokenStoreError {
@@ -124,11 +138,34 @@ final class UsageService: ObservableObject {
                 TokenStore.clear()
                 Log.error("Refresh failed: \(error.localizedDescription)")
             }
-        } catch UsageServiceError.usageFetchFailed(429) {
-            if self.usage == nil {
-                self.error = "Rate limited. Will retry shortly."
+        } catch UsageServiceError.rateLimited(let retryAfter) {
+            self.consecutive429s += 1
+            // After 3 consecutive 429s, try refreshing the token — the API sometimes
+            // returns 429 for revoked tokens instead of 401
+            if consecutive429s >= 3 {
+                Log.info("3 consecutive 429s, attempting token refresh as recovery")
+                self.cachedAccessToken = nil
+                self.tokenExpiresAt = nil
+                self.consecutive429s = 0
+                do {
+                    let token = try await refreshAndRetry()
+                    let usageData = try await requestUsage(token: token)
+                    self.usage = usageData
+                    self.error = nil
+                    self.rateLimitedUntil = nil
+                    cacheUsage(usageData)
+                    Log.info("Token refresh recovery succeeded")
+                    return
+                } catch {
+                    Log.error("Token refresh recovery failed: \(error.localizedDescription)")
+                }
             }
-            Log.info("Rate limited (429), keeping previous data")
+            let backoff = max(retryAfter, 60)
+            self.rateLimitedUntil = Date().addingTimeInterval(backoff)
+            if self.usage == nil {
+                self.error = "Rate limited. Retrying in \(Int(backoff))s..."
+            }
+            Log.error("Rate limited by API, backing off for \(Int(backoff))s (attempt \(consecutive429s))")
         } catch {
             self.error = error.localizedDescription
             Log.error("fetchUsage failed: \(error.localizedDescription)")
@@ -220,8 +257,23 @@ final class UsageService: ObservableObject {
             Log.info("Usage API HTTP \(httpResponse.statusCode): \(rawBody)")
         }
 
+        if httpResponse.statusCode == 429 {
+            Log.info("429 headers: \(httpResponse.allHeaderFields)")
+        }
+
         if httpResponse.statusCode == 401 {
             throw UsageServiceError.unauthorized
+        }
+
+        if httpResponse.statusCode == 429 {
+            let retryAfter: TimeInterval
+            if let retryHeader = httpResponse.value(forHTTPHeaderField: "Retry-After") ?? httpResponse.value(forHTTPHeaderField: "retry-after"),
+               let seconds = Double(retryHeader) {
+                retryAfter = seconds
+            } else {
+                retryAfter = 60
+            }
+            throw UsageServiceError.rateLimited(retryAfter: retryAfter)
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -236,6 +288,7 @@ enum UsageServiceError: LocalizedError {
     case usageFetchFailed(Int)
     case unauthorized
     case tokenRefreshFailed
+    case rateLimited(retryAfter: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -245,6 +298,8 @@ enum UsageServiceError: LocalizedError {
             return "Token expired"
         case .tokenRefreshFailed:
             return "Token refresh failed"
+        case .rateLimited(let retryAfter):
+            return "Rate limited. Retry in \(Int(retryAfter))s"
         }
     }
 }
