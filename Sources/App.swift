@@ -74,7 +74,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Anchor to the progress bar area (right portion of the button, after the sparkle icon).
+            // This prevents the popover from shifting when the sparkle count changes.
+            let imageWidth = button.image?.size.width ?? 0
+            let barRect = NSRect(
+                x: imageWidth,
+                y: button.bounds.origin.y,
+                width: button.bounds.width - imageWidth,
+                height: button.bounds.height
+            )
+            popover.show(relativeTo: barRect, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
     }
@@ -98,13 +107,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func maxFlameCount() -> Int {
+        switch settings.flameMode {
+        case .off:     return 0
+        case .single:  return 1
+        case .dynamic: return 3
+        case .madmax:  return 10
+        }
+    }
+
     private func createFlameImage(count: Int, frame: Int) -> NSImage {
         let size: CGFloat = 18
         let overlap: CGFloat = 0
-        let totalWidth = count == 0 ? size : size + CGFloat(count - 1) * (size - overlap)
+        // Fixed-width canvas based on max possible count — prevents layout shifts
+        let canvasCount = max(maxFlameCount(), 1)
+        let totalWidth = canvasCount <= 1 ? size : size + CGFloat(canvasCount - 1) * (size - overlap)
 
         let image = NSImage(size: NSSize(width: totalWidth, height: size))
         image.lockFocus()
+
+        // Right-align stars so they grow leftward as count increases
+        let starsSpan = count <= 1 ? size : size + CGFloat(count - 1) * (size - overlap)
+        let startX = totalWidth - starsSpan
 
         for i in 0..<count {
             // Each sparkle flickers independently using offset frame
@@ -121,7 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
             if let symbol = NSImage(systemSymbolName: "sparkle", accessibilityDescription: nil)?
                 .withSymbolConfiguration(config) {
-                let x = CGFloat(i) * (size - overlap)
+                let x = startX + CGFloat(i) * (size - overlap)
                 let yOffset = (size - pointSize) / 2
                 symbol.draw(in: NSRect(x: x, y: yOffset, width: pointSize, height: pointSize))
             }
@@ -140,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .systemGreen
     }
 
-    private func createProgressBarImage(percentage: Int, text: String) -> NSImage {
+    private func createProgressBarImage(percentage: Int, text: String, dimmed: Bool = false) -> NSImage {
         // The border is a ring AROUND the color bar.
         // We size the image to fit: border ring + gap + inner color pill.
         let barHeight: CGFloat = 20
@@ -157,7 +181,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .foregroundColor: textColor
         ]
         let textSize = (text as NSString).size(withAttributes: textAttrs)
-        let barWidth = textSize.width + horizontalPadding * 2
+
+        // Fixed-width bar based on widest possible text for current display mode — prevents layout shifts
+        let refText: String = {
+            switch AppSettings.shared.menuBarDisplay {
+            case .percentOnly: return "100%"
+            case .timeOnly:    return "00h 00m"
+            case .both:        return "100% · 00h 00m"
+            }
+        }()
+        let refSize = (refText as NSString).size(withAttributes: textAttrs)
+        let barWidth = max(textSize.width, refSize.width) + horizontalPadding * 2
 
         let image = NSImage(size: NSSize(width: barWidth, height: barHeight))
         image.lockFocus()
@@ -209,13 +243,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         image.unlockFocus()
         image.isTemplate = false
-        return image
+
+        guard dimmed else { return image }
+        let dimmedImage = NSImage(size: image.size)
+        dimmedImage.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: image.size),
+                   from: .zero, operation: .sourceOver, fraction: 0.4)
+        dimmedImage.unlockFocus()
+        dimmedImage.isTemplate = false
+        return dimmedImage
     }
 
     private func updateMenuBar() {
         guard let button = statusItem.button else { return }
 
-        // Sparkle/flame icon — stays as template (adapts to menu bar appearance)
+        // Sparkle/flame icon — always update so animation continues while popover is open
         if settings.flameMode != .off {
             let tps = activity.tokensPerSecond
             let count = flameCount(for: tps)
@@ -223,15 +265,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if count > 0 {
                 button.image = createFlameImage(count: count, frame: frameIndex)
             } else {
-                let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-                let image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "usage")?
-                    .withSymbolConfiguration(config)
-                image?.isTemplate = true
-                button.image = image
+                // Same fixed-width canvas as animated sparkles — prevents layout shift on transition
+                button.image = createFlameImage(count: 1, frame: 0)
             }
         } else {
             button.image = nil
         }
+
+        // Don't update progress bar / title while popover is open — prevents the dropdown from jumping
+        guard !popover.isShown else { return }
 
         guard let usage = service.usage else {
             button.attributedTitle = NSAttributedString(string: " —")
@@ -251,7 +293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Progress bar as text attachment (keeps sparkle icon separate as template)
-        let barImage = createProgressBarImage(percentage: pct, text: displayText)
+        let isActive = button.window?.screen == NSScreen.main
+        let barImage = createProgressBarImage(percentage: pct, text: displayText, dimmed: !isActive)
         let attachment = NSTextAttachment()
         attachment.image = barImage
         let yOffset = -6.5
